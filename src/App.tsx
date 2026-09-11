@@ -29,21 +29,52 @@ const MOOD_OPTIONS = [
   { id: "chill", label: "여유", icon: "~" },
 ];
 
-function getRecommendations(sel: Selections, count: number): string[] {
-  const pools: Record<string, string[]> = {
-    sunny_happy: ["냉면", "비빔밥", "카페 브런치", "쌀국수", "샐러드"],
-    sunny_tired: ["삼계탕", "보쌈정식", "닭죽", "죽", "사골국밥"],
-    rainy_sad: ["감자탕", "라면", "순두부찌개", "부대찌개", "칼국수"],
-    snowy_cold: ["부대찌개", "삼겹살", "어묵탕", "짜글이", "뚝배기 된장"],
-    hot_stressed: ["냉면", "콩국수", "냉모밀", "삼계탕", "물냉면"],
-    tired_sad: ["삼계탕", "곰탕", "사골국밥", "닭죽", "된장찌개"],
-  };
-  const key = `${sel.weather}_${sel.mood}`;
-  const alt = `${sel.mood}_${sel.weather}`;
-  const def = ["된장찌개 정식", "비빔밥", "삼겹살 구이", "칼국수", "짜장면", "순두부찌개", "냉면", "불고기덮밥"];
-  const pool = pools[key] || pools[alt] || def;
-  const extended = Array.from(new Set([...pool, ...def]));
-  return extended.slice(0, count);
+// 백엔드(dinner-recommender-backend) 서버 주소.
+// 로컬 개발 시 .env 파일에 VITE_API_BASE_URL을 지정하지 않으면 localhost:3000을 사용한다.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
+type BackendRecommendation = {
+  menu: string;
+  reason: string;
+  category: string;
+};
+
+type BackendResponse =
+  | { success: true; mode: string; recommendations: BackendRecommendation[] }
+  | { success: false; errors: string[] };
+
+/**
+ * 백엔드 /api/recommend 에 현재 선택값을 보내고 메뉴 이름 목록을 받아온다.
+ * (더 이상 프론트엔드에서 메뉴를 하드코딩하지 않음)
+ */
+async function getRecommendations(sel: Selections, count: number): Promise<string[]> {
+  const weatherLabel = WEATHER_OPTIONS.find((o) => o.id === sel.weather)?.label ?? sel.weather;
+  const moodLabel = MOOD_OPTIONS.find((o) => o.id === sel.mood)?.label ?? sel.mood;
+
+  const response = await fetch(`${API_BASE_URL}/api/recommend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      weather: weatherLabel,
+      mood: moodLabel,
+      peopleCount: sel.people,
+      dislikedFoods: sel.allergies,
+      recentFoods: sel.recentFood,
+      foodCount: count,
+    }),
+  });
+
+  const data: BackendResponse = await response.json();
+
+  if (!response.ok || !data.success) {
+    const message =
+      !data.success && Array.isArray(data.errors)
+        ? data.errors.join(", ")
+        : "메뉴 추천을 받아오지 못했습니다. 백엔드 서버가 켜져 있는지 확인해주세요.";
+    throw new Error(message);
+  }
+
+  return data.recommendations.map((r) => r.menu);
 }
 
 // ── Tiger SVG mascot ──────────────────────────────────────────────────────────
@@ -506,14 +537,20 @@ export default function App() {
   });
   const [results, setResults] = useState<string[] | null>(null);
   const [animating, setAnimating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!sel.weather || !sel.mood) return;
     setAnimating(true);
-    setTimeout(() => {
-      setResults(getRecommendations(sel, sel.count));
+    setError(null);
+    try {
+      const menus = await getRecommendations(sel, sel.count);
+      setResults(menus);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.");
+    } finally {
       setAnimating(false);
-    }, 700);
+    }
   };
 
   const canSubmit = sel.weather && sel.mood && !animating;
@@ -599,6 +636,10 @@ export default function App() {
           >
             {animating ? "메뉴 고르는 중 ..." : "메뉴 추천받기 →"}
           </button>
+
+          {error && (
+            <p className="text-sm text-red-500 text-center mt-1">{error}</p>
+          )}
         </div>
 
         {/* Results */}

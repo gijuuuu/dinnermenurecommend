@@ -1,0 +1,20 @@
+{
+  "name": "dinner-recommender-backend",
+  "version": "1.0.0",
+  "description": "날씨/기분/인원수/못먹는 음식/최근 먹은 음식을 받아 OpenAI API로 저녁 메뉴를 추천해주는 백엔드",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "openai": "^4.68.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
